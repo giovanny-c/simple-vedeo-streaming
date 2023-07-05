@@ -1,11 +1,13 @@
 
 import * as fs from "fs"
+import util from "util"
+import stream from "stream"
 import path from "path"
 import { Router, request as req, response as res } from "express";
 
 const routes = Router()
 
-routes.get("/", (req, res)=> {
+routes.get("/play", (req, res)=> {
 
     try {
        
@@ -19,7 +21,7 @@ routes.get("/", (req, res)=> {
     }
 })
 
-routes.get("/video", (req, res)=>{
+routes.get("/player1", (req, res)=>{
 
     try {
         
@@ -56,6 +58,7 @@ routes.get("/video", (req, res)=>{
         //enviando para o cliente atraves de uma writable stream (res)
         videoStream.pipe(res)
 
+       
 
     } catch (error) {
             res.status(500).send(error)
@@ -63,4 +66,75 @@ routes.get("/video", (req, res)=>{
 
 })
 
+routes.get("/player2", async (req, res) => {
+    try {
+
+        const {range} = req.headers
+
+        const videoPath = "videos/video.mp4"
+
+
+        if(range){
+            
+            // const fileInfo = util.promisify(fs.stat)
+            // const {size} = await fileInfo(videoPath)
+            //same as
+            const {size} = await fs.promises.stat(videoPath)
+            
+            let [bStart, bEnd] = range.replace(/bytes=/, "").split("-")
+            
+            let start = parseInt(bStart, 10)
+            let end = bEnd ? parseInt(bEnd, 10) : size - 1
+            
+            if(!isNaN(start) && isNaN(end)){
+                start = start
+                end = size - 1
+            }
+            
+            if(isNaN(start) && !isNaN(end)){
+                start = size - end
+                end = size - 1
+            }
+            
+            if(start >= size || end >= size){
+
+                res.writeHead(416, {
+                    "Content-Range": `bytes */${size}`
+                })//range not satisfiable
+                
+                return res.end()
+                
+            }
+            
+            // console.log(`
+            // size: ${size}, 
+            // range: ${range}
+            //     `)
+            
+            //     console.log("2")
+            
+            
+            res.writeHead(206, {
+                "Content-Range": `bytes ${start}-${end}/${size}`,
+                "Accept_Ranges": "bytes",
+                "Content-length": end - start + 1,
+                "Content-Type": "video/mp4", 
+            })
+            
+            // const readable = new stream.Readable(videoPath)
+            let readable = fs.createReadStream(videoPath, {start, end})
+            
+            //same as 
+            readable.pipe(res, {end: true})
+            // stream.pipeline(readable, res, err => {
+                //     console.log(err)
+                // })
+            
+        }
+            
+    } catch (error) {
+        console.error(error)
+    }
+})
+    
 export{routes}
